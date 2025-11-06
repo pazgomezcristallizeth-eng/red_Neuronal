@@ -1,0 +1,134 @@
+import flet as ft
+import asyncio
+import math
+
+COLOR_ENTRADA = "purple"
+COLOR_OCULTA = "red"
+COLOR_SALIDA = "yellow"
+COLOR_APAGADO = "#CCCCCC"
+COLOR_CONEXION = "#AAAAAA"
+
+POSICIONES = {
+    "entrada": [(100, 50), (130, 80), (70, 80)],
+    "oculta": [(100, 150), (80, 180), (120, 180), (60, 210), (140, 210)],
+    "salida": [(100, 280), (80, 310), (120, 310)]
+}
+
+def crear_leds():
+    leds = {}
+    for capa, pos_list in POSICIONES.items():
+        leds[capa] = []
+        for x, y in pos_list:
+            led = ft.Container(
+                width=25, height=25, bgcolor=COLOR_APAGADO,
+                border_radius=12.5, offset=ft.Offset(x, y)
+            )
+            leds[capa].append(led)
+    return leds
+
+def crear_canvas_conexiones(leds):
+    canvas = ft.Canvas(width=400, height=350)
+    conexiones = []
+
+    def agregar_curva(start, end, color=COLOR_CONEXION):
+        path = ft.Path()
+        mid_x = (start[0] + end[0]) / 2
+        mid_y = (start[1] + end[1]) / 2
+
+        path.move_to(*start)
+        path.quadratic_bezier_to(mid_x, start[1], *end)
+        stroke = ft.Paint(stroke_width=3, color=color)
+        canvas.draw_path(path, stroke)
+        return {"start": start, "end": end, "path": path, "color": color}
+
+    for led_in in leds["entrada"]:
+        for led_hid in leds["oculta"]:
+            conexiones.append(
+                agregar_curva(
+                    (led_in.offset.x + 12.5, led_in.offset.y + 12.5),
+                    (led_hid.offset.x + 12.5, led_hid.offset.y + 12.5)
+                )
+            )
+
+    for led_hid in leds["oculta"]:
+        for led_out in leds["salida"]:
+            conexiones.append(
+                agregar_curva(
+                    (led_hid.offset.x + 12.5, led_hid.offset.y + 12.5),
+                    (led_out.offset.x + 12.5, led_out.offset.y + 12.5)
+                )
+            )
+    return canvas, conexiones
+
+async def flujo_informacion(leds, canvas, conexiones):
+    # Función interna para parpadeo
+    async def parpadeo(led, color, tiempo=0.2):
+        led.bgcolor = color
+        led.shadow = ft.BoxShadow(0,0,15,5,color)
+        led.update()
+        await asyncio.sleep(tiempo)
+        led.bgcolor = COLOR_APAGADO
+        led.shadow = None
+        led.update()
+
+    # Encender entrada con parpadeo
+    for led in leds["entrada"]:
+        await parpadeo(led, COLOR_ENTRADA)
+    # Iluminar curvas entrada → oculta
+    for conn in conexiones[:len(leds["entrada"])*len(leds["oculta"])]:
+        conn["color"] = COLOR_ENTRADA
+        canvas.update()
+        await asyncio.sleep(0.05)
+    # Encender oculta
+    for led in leds["oculta"]:
+        await parpadeo(led, COLOR_OCULTA)
+    # Iluminar curvas oculta → salida
+    for conn in conexiones[len(leds["entrada"])*len(leds["oculta"]):]:
+        conn["color"] = COLOR_OCULTA
+        canvas.update()
+        await asyncio.sleep(0.05)
+    # Encender salida
+    for led in leds["salida"]:
+        await parpadeo(led, COLOR_SALIDA)
+    # Apagar todo suavemente
+    await asyncio.sleep(0.3)
+    for conn in conexiones:
+        conn["color"] = COLOR_CONEXION
+    canvas.update()
+
+def main(page: ft.Page):
+    page.title = "Maqueta Cerebro 3D Física Digital"
+    page.bgcolor = "white"
+    page.vertical_alignment = ft.MainAxisAlignment.CENTER
+
+    leds = crear_leds()
+    canvas, conexiones = crear_canvas_conexiones(leds)
+
+    # Fondo cerebro semitransparente
+    cerebro_fondo = ft.Container(
+        width=400, height=350, bgcolor="#E0E0E0",
+        border_radius=175, opacity=0.15
+    )
+
+    # Stack: fondo + canvas + LEDs
+    elementos = [cerebro_fondo, canvas]
+    for layer in leds.values():
+        elementos.extend(layer)
+    cerebro_stack = ft.Stack(elementos, alignment=ft.alignment.top_left)
+    page.add(cerebro_stack)
+
+    # Botón para activar flujo
+    button = ft.ElevatedButton(
+        "Activar flujo",
+        on_click=lambda e: asyncio.create_task(flujo_informacion(leds, canvas, conexiones))
+    )
+    page.add(button)
+
+    # Activación con teclado
+    def key_down(e: ft.KeyboardEvent):
+        if e.key.lower() in ["a","s","d"]:
+            asyncio.create_task(flujo_informacion(leds, canvas, conexiones))
+    page.on_key_down = key_down
+    page.focus()
+
+ft.app(target=main)
