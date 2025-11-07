@@ -1,0 +1,105 @@
+import flet as ft
+
+# Colores
+COLOR_ENTRADA = "purple"
+COLOR_OCULTA = "red"
+COLOR_SALIDA = "yellow"
+COLOR_APAGADO = "#CCCCCC"
+COLOR_CONEXION = "#AAAAAA"
+
+POSICIONES = {
+    "entrada": [(100, 50), (100, 150), (100, 250)],
+    "oculta": [(250, 100), (250, 200)],
+    "salida": [(400, 150)],
+}
+
+CONEXIONES = [
+    ("entrada", 0, "oculta", 0),
+    ("entrada", 0, "oculta", 1),
+    ("entrada", 1, "oculta", 0),
+    ("entrada", 1, "oculta", 1),
+    ("entrada", 2, "oculta", 0),
+    ("entrada", 2, "oculta", 1),
+    ("oculta", 0, "salida", 0),
+    ("oculta", 1, "salida", 0),
+]
+
+class Neurona:
+    def __init__(self, tipo, index, x, y):
+        self.tipo = tipo
+        self.index = index
+        self.x = x
+        self.y = y
+        self.circulo = ft.Container(
+            width=30,
+            height=30,
+            bgcolor=COLOR_APAGADO,
+            border_radius=15,
+            left=x,
+            top=y
+        )
+
+    def encender(self):
+        color = {
+            "entrada": COLOR_ENTRADA,
+            "oculta": COLOR_OCULTA,
+            "salida": COLOR_SALIDA
+        }.get(self.tipo, COLOR_APAGADO)
+        self.circulo.bgcolor = color
+
+    def apagar(self):
+        self.circulo.bgcolor = COLOR_APAGADO
+
+def main(page: ft.Page):
+    page.title = "Maqueta Red Neuronal"
+    page.window_width = 600
+    page.window_height = 400
+
+    neuronas = {"entrada": [], "oculta": [], "salida": []}
+    for tipo in POSICIONES:
+        for i, (x, y) in enumerate(POSICIONES[tipo]):
+            n = Neurona(tipo, i, x, y)
+            neuronas[tipo].append(n)
+            page.add(n.circulo)
+
+    lineas = []
+    for c in CONEXIONES:
+        tipo1, i1, tipo2, i2 = c
+        x1, y1 = POSICIONES[tipo1][i1]
+        x2, y2 = POSICIONES[tipo2][i2]
+        linea = ft.Container(
+            width=abs(x2-x1),
+            height=3,
+            bgcolor=COLOR_CONEXION,
+            left=min(x1, x2)+15,
+            top=min(y1, y2)+15
+        )
+        lineas.append(linea)
+        page.add(linea)
+
+    async def activar_secuencia():
+        for n in neuronas["entrada"]:
+            n.encender()
+            page.update()
+            await ft.sleep(0.3)
+            n.apagar()
+        for n in neuronas["oculta"]:
+            n.encender()
+            page.update()
+            await ft.sleep(0.3)
+            n.apagar()
+        for n in neuronas["salida"]:
+            n.encender()
+            page.update()
+            await ft.sleep(0.3)
+            n.apagar()
+
+
+    def key_down(e: ft.KeyboardEvent):
+        if e.key.lower() == "a":
+            page.create_task(activar_secuencia())
+
+    page.on_keyboard_event = key_down
+    page.update()
+
+ft.app(target=main)
